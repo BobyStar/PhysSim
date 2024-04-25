@@ -7,11 +7,25 @@ using Unity.EditorCoroutines.Editor;
 
 public static class PhysSimEditor
 {
+    public class PhysTransformData
+    {
+        public Vector3 position;
+        public Quaternion rotation;
+
+        public PhysTransformData(Vector3 position, Quaternion rotation)
+        {
+            this.position = position;
+            this.rotation = rotation;
+        }
+    }
+
     public static bool isRunning;
     public static bool isQuickSim;
 
     public static GameObject[] simObjects;
 
+
+    private static PhysTransformData[] startData;
     private static Rigidbody[] sceneRbs;
     private static List<MeshCollider> addedMCols;
     private static List<Rigidbody> addedRbs;
@@ -39,8 +53,44 @@ public static class PhysSimEditor
         return !isRunning && Selection.count > 0;
     }
 
+    private static void StoreSelectedPhysTransformData()
+    {
+        startData = new PhysTransformData[simObjects.Length];
+
+        for (int i = 0; i < simObjects.Length; i++)
+        {
+            startData[i] = new PhysTransformData(
+                simObjects[i].transform.position,
+                simObjects[i].transform.rotation);
+        }
+    }
+
+    private static void WritePhysTransformDataToUndo()
+    {
+        PhysTransformData[] endData = new PhysTransformData[simObjects.Length];
+
+        for (int i = 0; i < simObjects.Length; i++)
+        {
+            endData[i] = new PhysTransformData(
+                simObjects[i].transform.position, 
+                simObjects[i].transform.rotation);
+
+            simObjects[i].transform.SetPositionAndRotation(startData[i].position, startData[i].rotation);
+        }
+
+
+        for (int i = 0; i < simObjects.Length; i++)
+        {
+            Undo.RecordObject(simObjects[i].transform, $"PhysSim {(isQuickSim ? "Quick" : "Regular")} Simulation");
+
+            simObjects[i].transform.SetPositionAndRotation(endData[i].position, endData[i].rotation);
+        }
+    }
+
     private static void SetupSelectedSimulation()
     {
+        StoreSelectedPhysTransformData();
+
         sceneRbs = Object.FindObjectsOfType<Rigidbody>();
 
         wereKinematics = new bool[sceneRbs.Length];
@@ -50,7 +100,7 @@ public static class PhysSimEditor
         {
             i++;
             wereKinematics[i] = rb.isKinematic;
-
+            
             if (simObjects.Contains(rb.gameObject)) continue;
 
             rb.isKinematic = true;
@@ -94,6 +144,8 @@ public static class PhysSimEditor
 
         foreach (Rigidbody rb in addedRbs)
             Object.DestroyImmediate(rb);
+
+        WritePhysTransformDataToUndo();
     }
 
     public static void EndSimulation()
