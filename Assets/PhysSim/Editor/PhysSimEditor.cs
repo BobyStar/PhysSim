@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEditor;
+using UnityEditor.Overlays;
 using Unity.EditorCoroutines.Editor;
 
 namespace PhysSim
@@ -23,6 +24,8 @@ namespace PhysSim
 
         public static bool isRunning;
         public static bool isQuickSim;
+
+        private static Overlay physSimOverlay;
 
         public static GameObject[] simObjects;
 
@@ -45,6 +48,19 @@ namespace PhysSim
             simObjects = Selection.gameObjects;
 
             SetupSelectedSimulation();
+
+            if (SceneView.lastActiveSceneView)
+            {
+                physSimOverlay = null;
+                if (SceneView.lastActiveSceneView.TryGetOverlay("PhysSim Control", out physSimOverlay))
+                {
+                    Debug.Log("Found overlay!");
+
+                    physSimOverlay.displayed = true;
+                }
+                else Debug.Log("Failed to find overlay.");
+            }
+            else Debug.LogError("No active scene view found! Control Overlay may have issues.");
 
             EditorCoroutineUtility.StartCoroutineOwnerless(PhysicsUpdate());
         }
@@ -157,6 +173,10 @@ namespace PhysSim
             Debug.Log("Ending Simulation.");
 
             isRunning = false;
+
+            if (physSimOverlay != null)
+                physSimOverlay.displayed = false;
+
             EndSelectedSimulation();
         }
 
