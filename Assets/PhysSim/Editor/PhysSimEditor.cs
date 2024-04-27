@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEditor;
 using Unity.EditorCoroutines.Editor;
 
-namespace BobyStar.PhysSim
+namespace PhysSim
 {
     public static class PhysSimEditor
     {
@@ -30,6 +30,7 @@ namespace BobyStar.PhysSim
         private static Rigidbody[] sceneRbs;
         private static List<MeshCollider> addedMCols;
         private static List<Rigidbody> addedRbs;
+        private static List<Rigidbody> simRbs;
         private static bool[] wereKinematics;
 
         [MenuItem("GameObject/PhysSim/Quick Simulation", false, 0)]
@@ -109,6 +110,7 @@ namespace BobyStar.PhysSim
 
             addedMCols = new List<MeshCollider>();
             addedRbs = new List<Rigidbody>();
+            simRbs = new List<Rigidbody>();
             foreach (GameObject gO in simObjects)
             {
                 if (!gO.TryGetComponent(out Collider col))
@@ -123,12 +125,13 @@ namespace BobyStar.PhysSim
 
                 if (gO.TryGetComponent(out Rigidbody rb))
                 {
-                    addedRbs.Add(rb);
+                    simRbs.Add(rb);
                     rb.isKinematic = false;
                 }
                 else
                 {
                     addedRbs.Add(gO.AddComponent<Rigidbody>());
+                    simRbs.Add(addedRbs[^1]);
                 }
             }
         }
@@ -151,7 +154,7 @@ namespace BobyStar.PhysSim
 
         public static void EndSimulation()
         {
-            Debug.Log("Ending Simulation");
+            Debug.Log("Ending Simulation.");
 
             isRunning = false;
             EndSelectedSimulation();
@@ -165,14 +168,21 @@ namespace BobyStar.PhysSim
 
             yield return null;
 
-            float timer = 10;
-            while (timer > 0 && isRunning)
+            bool allSleeping = false;
+            while (isRunning && !allSleeping)
             {
-                timer -= isQuickSim ? Time.fixedDeltaTime : Time.unscaledDeltaTime;
-
                 Physics.Simulate(Time.fixedDeltaTime);
 
-                Debug.Log($"Time left: {timer}.");
+                allSleeping = true;
+                foreach (Rigidbody rb in simRbs)
+                {
+                    if (!rb.IsSleeping())
+                    {
+                        allSleeping = false;
+                        break;
+                    }
+                }
+
                 yield return isQuickSim ? null : new WaitForSecondsRealtime(Time.fixedDeltaTime);
             }
 
