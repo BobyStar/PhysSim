@@ -4,6 +4,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.Overlays;
+using UnityEngine.UIElements;
 using Unity.EditorCoroutines.Editor;
 
 namespace PhysSim
@@ -26,6 +27,7 @@ namespace PhysSim
         public static bool isQuickSim;
 
         private static Overlay physSimOverlay;
+        public static Toggle toggleQuickSim;
 
         public static GameObject[] simObjects;
 
@@ -34,14 +36,15 @@ namespace PhysSim
         private static List<MeshCollider> addedMCols;
         private static List<Rigidbody> addedRbs;
         private static List<Rigidbody> simRbs;
+        private static List<MeshCollider> markedConvexMCols;
         private static bool[] wereKinematics;
 
-        [MenuItem("GameObject/PhysSim/Quick Simulation", false, 0)]
+        [MenuItem("GameObject/Run PhysSim", false, 0)]
         public static void StartQuickSim()
         {
             if (isRunning) return;
 
-            Debug.Log("Starting Quick Sim");
+            Debug.Log("Starting PhysSim");
 
             isRunning = true;
             isQuickSim = true;
@@ -49,26 +52,41 @@ namespace PhysSim
 
             SetupSelectedSimulation();
 
-            if (SceneView.lastActiveSceneView)
-            {
-                physSimOverlay = null;
-                if (SceneView.lastActiveSceneView.TryGetOverlay("PhysSim Control", out physSimOverlay))
-                {
-                    Debug.Log("Found overlay!");
-
-                    physSimOverlay.displayed = true;
-                }
-                else Debug.Log("Failed to find overlay.");
-            }
-            else Debug.LogError("No active scene view found! Control Overlay may have issues.");
+            GetOverlay();
 
             EditorCoroutineUtility.StartCoroutineOwnerless(PhysicsUpdate());
         }
 
-        [MenuItem("GameObject/PhysSim/Quick Simulation", true)]
+        [MenuItem("GameObject/Run PhysSim", true)]
         public static bool Validate_StartQuickSim()
         {
-            return !isRunning && Selection.count > 0;
+            if (isRunning || Selection.count == 0) 
+                return false;
+
+            foreach (GameObject gO in Selection.gameObjects)
+            {
+                if (gO.TryGetComponent(out MeshFilter mFilter) && mFilter.sharedMesh)
+                    return true;
+
+                if (gO.TryGetComponent(out Collider _)) return true;
+            }
+
+            return false;
+        }
+
+        private static void GetOverlay()
+        {
+            if (SceneView.lastActiveSceneView)
+            {
+                physSimOverlay = null;
+                if (SceneView.lastActiveSceneView.TryGetOverlay("PhysSim", out physSimOverlay))
+                {
+                    physSimOverlay.displayed = true;
+                    toggleQuickSim.SetValueWithoutNotify(isQuickSim);
+                }
+                else Debug.Log("Failed to find overlay.");
+            }
+            else Debug.LogError("No active scene view found! Control Overlay may have issues.");
         }
 
         private static void StoreSelectedPhysTransformData()
@@ -77,6 +95,8 @@ namespace PhysSim
 
             for (int i = 0; i < simObjects.Length; i++)
             {
+                if (!simObjects[i]) continue;
+
                 startData[i] = new PhysTransformData(
                     simObjects[i].transform.position,
                     simObjects[i].transform.rotation);
@@ -89,6 +109,8 @@ namespace PhysSim
 
             for (int i = 0; i < simObjects.Length; i++)
             {
+                if (!simObjects[i]) continue;
+
                 endData[i] = new PhysTransformData(
                     simObjects[i].transform.position,
                     simObjects[i].transform.rotation);
@@ -96,10 +118,12 @@ namespace PhysSim
                 simObjects[i].transform.SetPositionAndRotation(startData[i].position, startData[i].rotation);
             }
 
-
+            string undoName = $"PhysSim ${simObjects.Length} objects.";
             for (int i = 0; i < simObjects.Length; i++)
             {
-                Undo.RecordObject(simObjects[i].transform, $"PhysSim {(isQuickSim ? "Quick" : "Regular")} Simulation");
+                if (!simObjects[i]) continue;
+
+                Undo.RecordObject(simObjects[i].transform, undoName);
 
                 simObjects[i].transform.SetPositionAndRotation(endData[i].position, endData[i].rotation);
             }
@@ -117,6 +141,9 @@ namespace PhysSim
             foreach (Rigidbody rb in sceneRbs)
             {
                 i++;
+
+                if (!rb) continue;
+
                 wereKinematics[i] = rb.isKinematic;
 
                 if (simObjects.Contains(rb.gameObject)) continue;
@@ -127,8 +154,11 @@ namespace PhysSim
             addedMCols = new List<MeshCollider>();
             addedRbs = new List<Rigidbody>();
             simRbs = new List<Rigidbody>();
+            markedConvexMCols = new List<MeshCollider>();
             foreach (GameObject gO in simObjects)
             {
+                if (!gO) continue;
+
                 if (!gO.TryGetComponent(out Collider col))
                 {
                     if (!gO.TryGetComponent(out MeshFilter mFilter))
@@ -137,6 +167,14 @@ namespace PhysSim
                     addedMCols.Add(gO.AddComponent<MeshCollider>());
                     addedMCols[^1].sharedMesh = mFilter.sharedMesh;
                     addedMCols[^1].convex = true;
+                }
+                else if (col.TryGetComponent(out MeshCollider mCol))
+                {
+                    if (!mCol.convex)
+                    {
+                        markedConvexMCols.Add(mCol);
+                        mCol.convex = true;
+                    }
                 }
 
                 if (gO.TryGetComponent(out Rigidbody rb))
@@ -156,22 +194,26 @@ namespace PhysSim
         {
             for (int i = 0; i < sceneRbs.Length; i++)
             {
+                if (!sceneRbs[i]) continue;
                 sceneRbs[i].isKinematic = wereKinematics[i];
             }
 
             foreach (MeshCollider mCol in addedMCols)
-                Object.DestroyImmediate(mCol);
+                if (mCol) Object.DestroyImmediate(mCol);
 
             foreach (Rigidbody rb in addedRbs)
-                Object.DestroyImmediate(rb);
+                if (rb) Object.DestroyImmediate(rb);
+
+            foreach (MeshCollider mCol in markedConvexMCols)
+                if (mCol) mCol.convex = false;
 
             WritePhysTransformDataToUndo();
         }
 
         public static void EndSimulation()
         {
+            if (!isRunning) return;
             Debug.Log("Ending Simulation.");
-
             isRunning = false;
 
             if (physSimOverlay != null)
@@ -182,24 +224,36 @@ namespace PhysSim
 
         public static IEnumerator PhysicsUpdate()
         {
-            Debug.Log("Starting Simulation.");
             bool autoSim = Physics.autoSimulation;
             Physics.autoSimulation = false;
 
             yield return null;
 
-            bool allSleeping = false;
-            while (isRunning && !allSleeping)
+            bool hasSwapped = false;
+            while (isRunning)
             {
                 Physics.Simulate(Time.fixedDeltaTime);
 
-                allSleeping = true;
-                foreach (Rigidbody rb in simRbs)
+                if (!hasSwapped)
                 {
-                    if (!rb.IsSleeping())
+                    if (!isQuickSim) hasSwapped = true;
+
+                    bool allSleeping = true;
+                    foreach (Rigidbody rb in simRbs)
                     {
-                        allSleeping = false;
-                        break;
+                        if (!rb.IsSleeping())
+                        {
+                            allSleeping = false;
+                            break;
+                        }
+                    }
+
+                    if (allSleeping)
+                    {
+                        isQuickSim = false;
+                        hasSwapped = true;
+                        if (toggleQuickSim != null)
+                            toggleQuickSim.SetValueWithoutNotify(false);
                     }
                 }
 
