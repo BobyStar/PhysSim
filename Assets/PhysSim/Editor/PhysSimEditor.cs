@@ -213,7 +213,7 @@ namespace PhysSim
         public static void EndSimulation()
         {
             if (!isRunning) return;
-            Debug.Log("Ending Simulation.");
+            Debug.Log("Ending PhysSim.");
             isRunning = false;
 
             if (physSimOverlay != null)
