@@ -25,6 +25,7 @@ namespace PhysSim
 
         public static bool isRunning;
         public static bool isQuickSim;
+        public static bool isSleepBake;
 
         private static Overlay physSimOverlay;
         public static Toggle toggleQuickSim;
@@ -70,6 +71,25 @@ namespace PhysSim
 
                 if (gO.TryGetComponent(out Collider _)) return true;
             }
+
+            return false;
+        }
+
+        [MenuItem("Tools/PhysSim Bake Rigidbody Initalization")]
+        public static void StartRigidbodyInitializationBake()
+        {
+            Debug.Log("Starting Rigidbody Initialization Bake");
+        }
+
+        [MenuItem("Tools/PhysSim Bake Rigidbody Initalization", true)]
+        public static bool Validate_StartRigidbodyInitializationBake()
+        {
+            sceneRbs = Object.FindObjectsOfType<Rigidbody>();
+
+            if (sceneRbs == null || sceneRbs.Length == 0) return false;
+
+            foreach (Rigidbody rb in sceneRbs)
+                if (!rb.isKinematic) return true;
 
             return false;
         }
