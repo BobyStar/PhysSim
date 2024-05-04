@@ -78,12 +78,30 @@ namespace PhysSim
         [MenuItem("Tools/PhysSim Bake Rigidbody Initalization")]
         public static void StartRigidbodyInitializationBake()
         {
+            if (isRunning) return;
             Debug.Log("Starting Rigidbody Initialization Bake");
+
+            isRunning = true;
+            isQuickSim = true;
+            isSleepBake = true;
+
+            sceneRbs = Object.FindObjectsOfType<Rigidbody>();
+            simObjects = new GameObject[sceneRbs.Length];
+            
+            for (int i = 0; i < sceneRbs.Length; i++)
+                simObjects[i] = sceneRbs[i].gameObject;
+
+            SetupSelectedSimulation();
+            GetOverlay();
+
+            EditorCoroutineUtility.StartCoroutineOwnerless(PhysicsUpdate());
         }
 
         [MenuItem("Tools/PhysSim Bake Rigidbody Initalization", true)]
         public static bool Validate_StartRigidbodyInitializationBake()
         {
+            if (isRunning) return false;
+
             sceneRbs = Object.FindObjectsOfType<Rigidbody>();
 
             if (sceneRbs == null || sceneRbs.Length == 0) return false;
@@ -153,7 +171,8 @@ namespace PhysSim
         {
             StoreSelectedPhysTransformData();
 
-            sceneRbs = Object.FindObjectsOfType<Rigidbody>();
+            if (!isSleepBake)
+                sceneRbs = Object.FindObjectsOfType<Rigidbody>();
 
             wereKinematics = new bool[sceneRbs.Length];
 
@@ -171,42 +190,49 @@ namespace PhysSim
                 rb.isKinematic = true;
             }
 
-            addedMCols = new List<MeshCollider>();
-            addedRbs = new List<Rigidbody>();
-            simRbs = new List<Rigidbody>();
-            markedConvexMCols = new List<MeshCollider>();
-            foreach (GameObject gO in simObjects)
+            if (!isSleepBake)
             {
-                if (!gO) continue;
-
-                if (!gO.TryGetComponent(out Collider col))
+                addedMCols = new List<MeshCollider>();
+                addedRbs = new List<Rigidbody>();
+                simRbs = new List<Rigidbody>();
+                markedConvexMCols = new List<MeshCollider>();
+                foreach (GameObject gO in simObjects)
                 {
-                    if (!gO.TryGetComponent(out MeshFilter mFilter))
-                        continue;
+                    if (!gO) continue;
 
-                    addedMCols.Add(gO.AddComponent<MeshCollider>());
-                    addedMCols[^1].sharedMesh = mFilter.sharedMesh;
-                    addedMCols[^1].convex = true;
-                }
-                else if (col.TryGetComponent(out MeshCollider mCol))
-                {
-                    if (!mCol.convex)
+                    if (!gO.TryGetComponent(out Collider col))
                     {
-                        markedConvexMCols.Add(mCol);
-                        mCol.convex = true;
+                        if (!gO.TryGetComponent(out MeshFilter mFilter))
+                            continue;
+
+                        addedMCols.Add(gO.AddComponent<MeshCollider>());
+                        addedMCols[^1].sharedMesh = mFilter.sharedMesh;
+                        addedMCols[^1].convex = true;
+                    }
+                    else if (col.TryGetComponent(out MeshCollider mCol))
+                    {
+                        if (!mCol.convex)
+                        {
+                            markedConvexMCols.Add(mCol);
+                            mCol.convex = true;
+                        }
+                    }
+
+                    if (gO.TryGetComponent(out Rigidbody rb))
+                    {
+                        simRbs.Add(rb);
+                        rb.isKinematic = false;
+                    }
+                    else
+                    {
+                        addedRbs.Add(gO.AddComponent<Rigidbody>());
+                        simRbs.Add(addedRbs[^1]);
                     }
                 }
-
-                if (gO.TryGetComponent(out Rigidbody rb))
-                {
-                    simRbs.Add(rb);
-                    rb.isKinematic = false;
-                }
-                else
-                {
-                    addedRbs.Add(gO.AddComponent<Rigidbody>());
-                    simRbs.Add(addedRbs[^1]);
-                }
+            }
+            else // isSleepBake
+            {
+                simRbs = sceneRbs.ToList();
             }
         }
 
@@ -226,8 +252,6 @@ namespace PhysSim
 
             foreach (MeshCollider mCol in markedConvexMCols)
                 if (mCol) mCol.convex = false;
-
-            WritePhysTransformDataToUndo();
         }
 
         public static void EndSimulation()
@@ -239,7 +263,17 @@ namespace PhysSim
             if (physSimOverlay != null)
                 physSimOverlay.displayed = false;
 
-            EndSelectedSimulation();
+            if (isSleepBake)
+            {
+                foreach (Rigidbody rb in sceneRbs)
+                {
+                    if (rb.IsSleeping())
+                        Debug.Log($"{rb.name} slept after the bake.");
+                }
+            }    
+            else EndSelectedSimulation();
+
+            WritePhysTransformDataToUndo();
         }
 
         public static IEnumerator PhysicsUpdate()
@@ -274,6 +308,8 @@ namespace PhysSim
                         hasSwapped = true;
                         if (toggleQuickSim != null)
                             toggleQuickSim.SetValueWithoutNotify(false);
+
+                        if (isSleepBake) break;
                     }
                 }
 
