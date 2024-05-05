@@ -32,13 +32,16 @@ namespace PhysSim
 
         public static GameObject[] simObjects;
 
-        private static PhysTransformData[] startData;
+        private static Dictionary<GameObject,PhysTransformData> startData;
         private static Rigidbody[] sceneRbs;
         private static List<MeshCollider> addedMCols;
         private static List<Rigidbody> addedRbs;
         private static List<Rigidbody> simRbs;
         private static List<MeshCollider> markedConvexMCols;
         private static bool[] wereKinematics;
+
+        private static List<Rigidbody> sleptRbs;
+        private static List<Rigidbody> awakeRbs;
 
         [MenuItem("GameObject/Run PhysSim", false, 0)]
         public static void StartQuickSim()
@@ -61,7 +64,7 @@ namespace PhysSim
         [MenuItem("GameObject/Run PhysSim", true)]
         public static bool Validate_StartQuickSim()
         {
-            if (isRunning || Selection.count == 0) 
+            if (isRunning || isSleepBake || Selection.count == 0)
                 return false;
 
             foreach (GameObject gO in Selection.gameObjects)
@@ -75,7 +78,7 @@ namespace PhysSim
             return false;
         }
 
-        [MenuItem("Tools/PhysSim Bake Rigidbody Initalization")]
+        [MenuItem("Tools/PhysSim/Bake Rigidbody Initalization")]
         public static void StartRigidbodyInitializationBake()
         {
             if (isRunning) return;
@@ -97,10 +100,10 @@ namespace PhysSim
             EditorCoroutineUtility.StartCoroutineOwnerless(PhysicsUpdate());
         }
 
-        [MenuItem("Tools/PhysSim Bake Rigidbody Initalization", true)]
+        [MenuItem("Tools/PhysSim/Bake Rigidbody Initalization", true)]
         public static bool Validate_StartRigidbodyInitializationBake()
         {
-            if (isRunning) return false;
+            if (isRunning || isSleepBake) return false;
 
             sceneRbs = Object.FindObjectsOfType<Rigidbody>();
 
@@ -110,6 +113,26 @@ namespace PhysSim
                 if (!rb.isKinematic) return true;
 
             return false;
+        }
+
+        [MenuItem("Tools/PhysSim/Wake Up Scene Rigidbodies")]
+        public static void WakeUpRigidbodiesInScene()
+        {
+            if (!EditorUtility.DisplayDialog("PhysSim Wake Up All Rigidbodies",
+                "Are you sure you want to wake up all Rigidbodies in the scene?\n\n" +
+                "This cannot be undone.", "Wake Up", "Cancel"))
+            { return; }
+
+            foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+            {
+                rb.WakeUp();
+            }
+        }
+
+        [MenuItem("Tools/PhysSim/Wake Up Scene Rigidbodies", true)]
+        public static bool Validate_WakeUpRigidbodiesInScene()
+        {
+            return Object.FindObjectsOfType<Rigidbody>().Length > 0;
         }
 
         private static void GetOverlay()
@@ -129,15 +152,15 @@ namespace PhysSim
 
         private static void StoreSelectedPhysTransformData()
         {
-            startData = new PhysTransformData[simObjects.Length];
+            startData = new Dictionary<GameObject, PhysTransformData>();
 
             for (int i = 0; i < simObjects.Length; i++)
             {
                 if (!simObjects[i]) continue;
 
-                startData[i] = new PhysTransformData(
+                startData.Add(simObjects[i], new PhysTransformData(
                     simObjects[i].transform.position,
-                    simObjects[i].transform.rotation);
+                    simObjects[i].transform.rotation));
             }
         }
 
@@ -153,7 +176,7 @@ namespace PhysSim
                     simObjects[i].transform.position,
                     simObjects[i].transform.rotation);
 
-                simObjects[i].transform.SetPositionAndRotation(startData[i].position, startData[i].rotation);
+                simObjects[i].transform.SetPositionAndRotation(startData[simObjects[i]].position, startData[simObjects[i]].rotation);
             }
 
             string undoName = $"PhysSim ${simObjects.Length} objects.";
@@ -277,8 +300,8 @@ namespace PhysSim
             PhysSimWindow window = EditorWindow.GetWindow<PhysSimWindow>();
             window.titleContent = new GUIContent("PhysSim Bake");
 
-            List<Rigidbody> sleptRbs = new List<Rigidbody>();
-            List<Rigidbody> awakeRbs = new List<Rigidbody>();
+            sleptRbs = new List<Rigidbody>();
+            awakeRbs = new List<Rigidbody>();
 
             foreach (Rigidbody rb in simRbs)
             {
@@ -303,6 +326,39 @@ namespace PhysSim
             {
                 window.gui_namesRight[i] = awakeRbs[i].name;
                 window.gui_selectedRight[i] = false;
+            }
+        }
+
+        public static void MarkSleepingAndRevertOthers(bool[] markedSleep, bool[] markedAwake)
+        {
+            if (!isSleepBake)
+                return;
+
+            if (markedSleep.Length != sleptRbs.Count || markedAwake.Length != awakeRbs.Count)
+                return;
+
+            for (int i = 0; i < markedSleep.Length; i++)
+            {
+                if (!sleptRbs[i]) return;
+                if (markedSleep[i])
+                    sleptRbs[i].Sleep();
+                else
+                {
+                    PhysTransformData ptData = startData[sleptRbs[i].gameObject];
+                    sleptRbs[i].transform.SetPositionAndRotation(ptData.position, ptData.rotation);
+                }
+            }
+
+            for (int i = 0; i < markedAwake.Length; i++)
+            {
+                if (!awakeRbs[i]) return;
+                if (markedAwake[i])
+                    awakeRbs[i].Sleep();
+                else
+                {
+                    PhysTransformData ptData = startData[awakeRbs[i].gameObject];
+                    awakeRbs[i].transform.SetPositionAndRotation(ptData.position, ptData.rotation);
+                }
             }
         }
 

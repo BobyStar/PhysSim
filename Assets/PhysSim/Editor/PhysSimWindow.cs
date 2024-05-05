@@ -62,9 +62,15 @@ namespace PhysSim
             EditorGUILayout.Space();
             if (GUILayout.Button("Mark Asleep and Revert Others"))
             {
-                Debug.Log("Doing the thing!");
+                PhysSimEditor.MarkSleepingAndRevertOthers(gui_selectedLeft, gui_selectedRight);
                 Close();
             }
+        }
+
+        private void OnDestroy()
+        {
+            if (PhysSimEditor.isSleepBake)
+                PhysSimEditor.isSleepBake = false;
         }
     }
 }
