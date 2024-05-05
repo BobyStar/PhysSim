@@ -2,9 +2,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.UIElements;
 using UnityEditor;
 using UnityEditor.Overlays;
-using UnityEngine.UIElements;
 using Unity.EditorCoroutines.Editor;
 
 namespace PhysSim
@@ -265,15 +265,45 @@ namespace PhysSim
 
             if (isSleepBake)
             {
-                foreach (Rigidbody rb in sceneRbs)
-                {
-                    if (rb.IsSleeping())
-                        Debug.Log($"{rb.name} slept after the bake.");
-                }
+                OpenSleepWindow();
             }    
             else EndSelectedSimulation();
 
             WritePhysTransformDataToUndo();
+        }
+
+        private static void OpenSleepWindow()
+        {
+            PhysSimWindow window = EditorWindow.GetWindow<PhysSimWindow>();
+            window.titleContent = new GUIContent("PhysSim Bake");
+
+            List<Rigidbody> sleptRbs = new List<Rigidbody>();
+            List<Rigidbody> awakeRbs = new List<Rigidbody>();
+
+            foreach (Rigidbody rb in simRbs)
+            {
+                if (rb.IsSleeping())
+                    sleptRbs.Add(rb);
+                else
+                    awakeRbs.Add(rb);
+            }
+
+            window.gui_selectedLeft = new bool[sleptRbs.Count];
+            window.gui_namesLeft = new string[sleptRbs.Count];
+            window.gui_selectedRight = new bool[awakeRbs.Count];
+            window.gui_namesRight = new string[awakeRbs.Count];
+
+            for (int i = 0; i < window.gui_namesLeft.Length; i++)
+            {
+                window.gui_namesLeft[i] = sleptRbs[i].name;
+                window.gui_selectedLeft[i] = true;
+            }
+
+            for (int i = 0; i < window.gui_namesRight.Length; i++)
+            {
+                window.gui_namesRight[i] = awakeRbs[i].name;
+                window.gui_selectedRight[i] = false;
+            }
         }
 
         public static IEnumerator PhysicsUpdate()
