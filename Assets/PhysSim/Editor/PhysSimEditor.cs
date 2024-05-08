@@ -192,6 +192,7 @@ namespace PhysSim
 
         private static void SetupSelectedSimulation()
         {
+            UnityEditor.EditorTools.ToolManager.SetActiveTool(typeof(PhysSimToolForce));
             StoreSelectedPhysTransformData();
 
             if (!isSleepBake)
@@ -282,6 +283,9 @@ namespace PhysSim
             if (!isRunning) return;
             Debug.Log("Ending PhysSim.");
             isRunning = false;
+
+            if (UnityEditor.EditorTools.ToolManager.activeToolType == typeof(PhysSimToolForce))
+                UnityEditor.EditorTools.ToolManager.RestorePreviousPersistentTool();
 
             if (physSimOverlay != null)
                 physSimOverlay.displayed = false;
