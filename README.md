@@ -12,5 +12,5 @@ The tool for simulating physics in the editor. Great for placing (or playing wit
 - Unity Editor Coroutines 1.0.
 
 ## Install
-1. Install the [Unity Editor Coroutines Package](https://docs.unity3d.com/Packages/com.unity.editorcoroutines@1.0) using the Unity Package Manager.  
+1. Install the [Editor Coroutines Package](https://docs.unity3d.com/Packages/com.unity.editorcoroutines@1.0) using the Unity Package Manager.  
 2. Import the PhysSim Unity Package.
