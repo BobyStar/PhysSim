@@ -22,7 +22,10 @@ namespace PhysSim
         public override void OnToolGUI(EditorWindow window)
         {
             if (!PhysSimEditor.isRunning && !Application.isPlaying)
+            {
+                ToolManager.RestorePreviousTool();
                 return;
+            }
 
             HandleUtility.AddDefaultControl(GUIUtility.GetControlID(FocusType.Passive));
 
