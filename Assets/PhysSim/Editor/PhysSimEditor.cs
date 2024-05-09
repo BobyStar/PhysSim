@@ -23,12 +23,18 @@ namespace PhysSim
             }
         }
 
+        private static bool setupEndBeforeRecompile;
         public static bool isRunning;
         public static bool isQuickSim;
         public static bool isSleepBake;
 
+        public static float toolForceRadius = 1;
+        public static float toolForcePower = 10;
+
         private static Overlay physSimOverlay;
         public static Toggle toggleQuickSim;
+        public static Slider sliderRadius;
+        public static Slider sliderPower;
 
         public static GameObject[] simObjects;
 
@@ -47,8 +53,6 @@ namespace PhysSim
         public static void StartQuickSim()
         {
             if (isRunning) return;
-
-            Debug.Log("Starting PhysSim");
 
             isRunning = true;
             isQuickSim = true;
@@ -82,7 +86,6 @@ namespace PhysSim
         public static void StartRigidbodyInitializationBake()
         {
             if (isRunning) return;
-            Debug.Log("Starting Rigidbody Initialization Bake");
 
             isRunning = true;
             isQuickSim = true;
@@ -123,10 +126,22 @@ namespace PhysSim
                 "This cannot be undone.", "Wake Up", "Cancel"))
             { return; }
 
+            int count = 0;
+            int sleeping = 0;
             foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
             {
-                rb.WakeUp();
+                if (rb.IsSleeping())
+                {
+                    sleeping++;
+                    rb.WakeUp();
+                }
+                count++;
             }
+
+            if (sleeping > 0)
+                Debug.Log($"Woke up {sleeping} out of {count} rigidbodies in the Scene.");
+            else
+                Debug.Log("All rigidbodies in Scene are already awake!");
         }
 
         [MenuItem("Tools/PhysSim/Wake Up Scene Rigidbodies", true)]
@@ -145,7 +160,7 @@ namespace PhysSim
                     physSimOverlay.displayed = true;
                     toggleQuickSim.SetValueWithoutNotify(isQuickSim);
                 }
-                else Debug.Log("Failed to find overlay.");
+                else Debug.LogWarning("Failed to find overlay.");
             }
             else Debug.LogError("No active scene view found! Control Overlay may have issues.");
         }
@@ -281,7 +296,7 @@ namespace PhysSim
         public static void EndSimulation()
         {
             if (!isRunning) return;
-            Debug.Log("Ending PhysSim.");
+            Physics.autoSimulation = true;
             isRunning = false;
 
             if (UnityEditor.EditorTools.ToolManager.activeToolType == typeof(PhysSimToolForce))
@@ -295,6 +310,15 @@ namespace PhysSim
                 OpenSleepWindow();
             }    
             else EndSelectedSimulation();
+
+            foreach (Rigidbody rb in simRbs)
+            {
+                if (rb)
+                {
+                    rb.velocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+            }
 
             WritePhysTransformDataToUndo();
         }
@@ -368,8 +392,15 @@ namespace PhysSim
 
         public static IEnumerator PhysicsUpdate()
         {
-            bool autoSim = Physics.autoSimulation;
             Physics.autoSimulation = false;
+
+            if (!setupEndBeforeRecompile)
+            {
+                setupEndBeforeRecompile = true;
+                AssemblyReloadEvents.beforeAssemblyReload += EndSimulation;
+
+                EditorApplication.playModeStateChanged += PlayModeStateChanged;
+            }
 
             yield return null;
 
@@ -406,10 +437,19 @@ namespace PhysSim
                 yield return isQuickSim ? null : new WaitForSecondsRealtime(Time.fixedDeltaTime);
             }
 
-            Physics.autoSimulation = autoSim;
+            Physics.autoSimulation = true;
 
             if (isRunning)
                 EndSimulation();
+        }
+
+        private static void PlayModeStateChanged(PlayModeStateChange playModeState)
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode && isRunning)
+            {
+                EditorApplication.ExitPlaymode();
+                SceneView.lastActiveSceneView.ShowNotification(new GUIContent("You need to end the current PhysSim simulation before switching to Play Mode!"));
+            }
         }
     }
 }
