@@ -51,7 +51,7 @@ namespace PhysSim
                 Handles.DrawWireDisc(attractPoint, -sceneFwd, PhysSimEditor.toolForceRadius);
 
                 hittingSimObject = false;
-                
+
                 if (isMouseHeld && e.button == 0)
                 {
                     foreach (Collider col in Physics.OverlapSphere(attractPoint, PhysSimEditor.toolForceRadius, -1, QueryTriggerInteraction.Ignore))
