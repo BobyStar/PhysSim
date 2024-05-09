@@ -194,7 +194,7 @@ namespace PhysSim
                 simObjects[i].transform.SetPositionAndRotation(startData[simObjects[i]].position, startData[simObjects[i]].rotation);
             }
 
-            string undoName = $"PhysSim ${simObjects.Length} objects.";
+            string undoName = $"PhysSim {simObjects.Length} objects.";
             for (int i = 0; i < simObjects.Length; i++)
             {
                 if (!simObjects[i]) continue;
@@ -321,6 +321,9 @@ namespace PhysSim
             }
 
             WritePhysTransformDataToUndo();
+
+            if (!isSleepBake)
+                Selection.objects = simObjects;
         }
 
         private static void OpenSleepWindow()
@@ -400,6 +403,12 @@ namespace PhysSim
                 AssemblyReloadEvents.beforeAssemblyReload += EndSimulation;
 
                 EditorApplication.playModeStateChanged += PlayModeStateChanged;
+            }
+
+            if (!isSleepBake)
+            {
+                Selection.objects = null;
+                Selection.activeGameObject = null;
             }
 
             yield return null;
